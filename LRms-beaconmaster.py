@@ -1,185 +1,329 @@
-import serial
-import threading
-import time
-import curses
+'''
+A more sophisticated and pythonic version of the LRms-beaconmaster.py script.
+Aiming for a modular design and easier to add to down the road.
+'''
+
 from datetime import datetime
+import curses
+from collections import deque
+import threading
+import serial
 
-# Initialize UART - NOTE Baudrate is 9600 FOR RYLR993 and 115200 for RYLR998
-ser = serial.Serial('/dev/ttyS0', 9600, timeout=1)
+BEACON_INTERVAL = 60  # seconds
 
-# Send AT commands to configure the RYLR993 or RYLR998
+class DeviceConnection:
+    """
+    Manages the connection and communication with the LoRa device.
 
-ser.write(b'AT+RESET\r\n')  # Reset Module
-print("Reset RYLR Module Wait...")
-time.sleep(2)
-data = ser.readline().decode('utf-8').strip()
-print(data)
+    This class handles the serial connection, device configuration, and
+    basic read/write operations for RYLR993 or RYLR998 LoRa modules.
 
-ser.write(b'AT+OPMODE=1\r\n')  # Set RYLR993 to poprietary mode - not needed for RYLR998
-print("Set RYLR993 to proprietary mode")
-time.sleep(2)
-data = ser.readline().decode('utf-8').strip()
-print(data)
-data = ser.readline().decode('utf-8').strip()
-print(data)
+    Attributes:
+        ser (serial.Serial): Serial connection object.
+        device_type (str): Type of the LoRa device ('RYLR993' or 'RYLR998').
+        rf_freq (int): Radio frequency in Hz.
+        node_id (int): Node ID for the device.
+        tx_power (int): Transmission power in dBm.
+        lora_params (str): LoRa parameters string.
+    """
 
-ser.write(b'AT+RESET\r\n')  # Reset Module
-print("Reset RYLR Module")
-time.sleep(2)
-data = ser.readline().decode('utf-8').strip()
-print(data)
+    def __init__(self, port='/dev/ttyS0', rf_freq=867500000, node_id=1, tx_power=22, lora_params='9,7,1,12', device_type='RYLR993'):
+        """
+        Initialise the DeviceConnection.
 
-ser.write(b'AT+BAND=867500000\r\n') # Set LoRa frequency
-print("Setting RF Frequency to 867.500MHZ")
-time.sleep(1)
-data = ser.readline().decode('utf-8').strip()
-print(data)
-data = ser.readline().decode('utf-8').strip()
-print(data)
+        Args:
+            port (str): Serial port path.
+            rf_freq (int): Radio frequency in Hz.
+            node_id (int): Node ID for the device.
+            tx_power (int): Transmission power in dBm.
+            lora_params (str): LoRa parameters string.
+            device_type (str): Type of the LoRa device ('RYLR993' or 'RYLR998').
+        
+        Raises:
+            ValueError: If an invalid device type is provided.
+        """
+        if device_type not in ['RYLR993', 'RYLR998']:
+            raise ValueError('Device type must be RYLR993 or RYLR998')
+        baud_rates = {'RYLR993': 9600, 'RYLR998': 115200}
+        self.ser = serial.Serial(port, baud_rates[device_type], timeout=1)
+        self.device_type = device_type
+        self.rf_freq = rf_freq
+        self.node_id = node_id
+        self.tx_power = tx_power
+        self.lora_params = lora_params
 
-ser.write(b'AT+ADDRESS=1\r\n') # Set node ID
-print("Setting Node ID to 1")
-time.sleep(1)
-data = ser.readline().decode('utf-8').strip()
-print(data)
-data = ser.readline().decode('utf-8').strip()
-print(data)
-data = ser.readline().decode('utf-8').strip()
-print(data)
+    def read_serial(self, max_reads=100):
+        """
+        Read data from the serial connection.
 
-ser.write(b'AT+CRFOP=22\r\n')  # Set TX power
-print("Setting TX power to 22dBm")
-time.sleep(1)
-data = ser.readline().decode('utf-8').strip()
-print(data)
-data = ser.readline().decode('utf-8').strip()
-print(data)
+        Args:
+            max_reads (int): Maximum number of read attempts.
 
-ser.write(b'AT+PARAMETER=9,7,1,12\r\n') # Set LoRa parameters - see RYLR documentation
-print("Setting LoRa Parameters for LRms")
-time.sleep(1)
-data = ser.readline().decode('utf-8').strip()
-print(data)
-data = ser.readline().decode('utf-8').strip()
-print(data)
+        Yields:
+            str: Decoded data read from the serial connection.
+        """
+        for _ in range(max_reads):
+            data = self.ser.readline().decode('utf-8').strip()
+            if not data:
+                break
+            yield data
 
-# Initialize curses
-stdscr = curses.initscr()
-curses.noecho()
-curses.cbreak()
-stdscr.keypad(True)
-stdscr.clear()
-stdscr.refresh()
+    def write_serial(self, text):
+        """
+        Write data to the serial connection.
 
-# Define screen layout parameters
-serial_lines = curses.LINES - 5  # Number of lines reserved for serial output, user input, and timestamps
-menu_line = curses.LINES - 4  # Line number for the menu
-input_line = curses.LINES - 2  # Line number for user input prompt
+        Args:
+            text (str): Text to be written to the serial connection.
+        """
+        self.ser.write(text.encode())
 
-# Circular buffer for storing recent serial output lines with timestamps
-output_buffer = []
+    def configure_device(self):
+        """
+        Configure the LoRa device with the specified settings.
 
-# Global variables for user input
-user_input = ""
-user_input_chars = 0  # Initialize user_input_chars
+        This method sends a series of AT commands to set up the device
+        according to the initialised parameters.
+        """
+        self.write_serial('AT+RESET\r\n')
+        threading.Event().wait(2)
+        if self.device_type == 'RYLR993':
+            self.write_serial('AT+OPMODE=1\r\n')
+            threading.Event().wait(2)
+            self.write_serial('AT+RESET\r\n')
+            threading.Event().wait(2)
+        self.write_serial(f'AT+BAND={self.rf_freq}\r\n')
+        threading.Event().wait(1)
+        self.write_serial(f'AT+ADDRESS={self.node_id}\r\n')
+        threading.Event().wait(1)
+        self.write_serial(f'AT+CRFOP={self.tx_power}\r\n')
+        threading.Event().wait(1)
+        self.write_serial(f'AT+PARAMETER={self.lora_params}\r\n')
+        threading.Event().wait(1)
+        for _ in self.read_serial():
+            pass  # Consume all responses
 
-# Flag to track whether the input field is active
-input_active = False
+    def close(self):
+        """
+        Close the serial connection to the device.
+        """
+        if self.ser.is_open:
+            self.ser.close()
 
-# Function to read from serial port and update UI
-def update_ui(stdscr):
-    header_text = " Welcome to LRms Beacon Master V1.0 by Andy Kirby "
-    stdscr.addstr(0, 0, header_text.center(curses.COLS), curses.A_REVERSE)  # Inverted header
-    stdscr.addstr(1, 0, "-" * (curses.COLS - 1))  # Separator line
+class Commander:
+    """
+    Handles command operations for the LoRa device.
 
-    line_num = 2  # Starting line number for serial output
+    This class is responsible for sending AT commands and managing
+    beacon transmissions.
 
-    while True:
-        try:
-            if ser.in_waiting > 0:
-                data = ser.readline().decode('utf-8').strip()
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # Get current timestamp
-                output_buffer.append(f"[{timestamp}] {data}")  # Add data with timestamp to the circular buffer
+    Attributes:
+        device_connection (DeviceConnection): The device connection object.
+    """
 
-                # Update the visible portion of the screen with buffer content
-                for idx, line in enumerate(output_buffer[-serial_lines:]):
-                    stdscr.addstr(line_num + idx, 0, line.ljust(curses.COLS - 1))
+    def __init__(self, device_connection):
+        """
+        Initialise the Commander.
 
-                stdscr.refresh()
+        Args:
+            device_connection (DeviceConnection): The device connection object.
+        """
+        self.device_connection = device_connection
 
-                # Move cursor to menu line to prevent overwrite
-                stdscr.move(menu_line, 0)
-                stdscr.clrtoeol()  # Clear line to prevent overwrite
+    def send_at_command(self, command):
+        """
+        Send an AT command to the LoRa device.
 
-        except serial.SerialException as e:
-            # Handle serial port errors
-            stdscr.addstr(line_num, 0, f"Error: {e}")
-            stdscr.refresh()
-            break  # Exit the loop on error
+        Args:
+            command (str): The command to send.
 
-# Function to send AT command with "Beaconing" every 60 seconds
-def send_at_command():
-    global user_input_chars  # Use the global variable
+        Returns:
+            str: A string describing the sent command.
+        """
+        cmd_length = len(command)
+        full_command = f"AT+SEND=0,{cmd_length},{command}\r\n"
+        self.device_connection.write_serial(full_command)
+        return f"Sent command: {full_command.strip()}"
 
-    while True:
-        command = f'AT+SEND=0,{user_input_chars},{user_input}\r\n'
-        ser.write(command.encode('utf-8'))  # Send the updated AT command
-        output_buffer.append(f"Beaconing: {user_input}")  # Add beaconing info to the circular buffer
-        time.sleep(60)  # Sleep for 60 seconds
+class BeaconMasterUI:
+    """
+    Manages the user interface for the Beacon Master application.
 
-# Function to get user input
-def get_user_input(stdscr):
-    global user_input, user_input_chars, input_active
-    stdscr.addstr(input_line, 0, "Enter Beacon Text (Max 50 chars): ")
-    stdscr.move(input_line, len("Enter Beacon Text (Max 50 chars): "))  # Move cursor after the colon
-    stdscr.refresh()
-    curses.echo()
-    user_input = stdscr.getstr(input_line, len("Enter Beacon Text (Max 50 chars): "), 50).decode('utf-8')[:50]  # Limit input to 50 chars
-    curses.noecho()
-    user_input_chars = len(user_input)  # Get the number of characters entered
-    input_active = False  # Reset input_active flag
+    This class handles the curses-based UI, including display updates,
+    user input, and interaction with the Commander and DeviceConnection.
 
-# Main function to setup curses and run application
+    Attributes:
+        stdscr (curses.window): The main curses window.
+        device_connection (DeviceConnection): The device connection object.
+        commander (Commander): The commander object for sending commands.
+        max_lines (int): Maximum number of lines in the output buffer.
+        output_buffer (collections.deque): Buffer for storing output messages.
+        input_active (bool): Flag indicating if input is active.
+        user_input (str): Current user input string.
+        beacon_text (str): Text to be used for beaconing.
+        stop_event (threading.Event): Event for signaling threads to stop.
+    """
+
+    def __init__(self, stdscr, device_connection, commander, max_lines=100):
+        """
+        Initialise the BeaconMasterUI.
+
+        Args:
+            stdscr (curses.window): The main curses window.
+            device_connection (DeviceConnection): The device connection object.
+            commander (Commander): The commander object for sending commands.
+            max_lines (int): Maximum number of lines in the output buffer.
+        """
+        self.stdscr = stdscr
+        self.device_connection = device_connection
+        self.commander = commander
+        self.max_lines = max_lines
+        self.output_buffer = deque(maxlen=max_lines)
+        self.input_active = False
+        self.user_input = ""
+        self.beacon_text = "LRms Beacon"
+        self.setup_curses()
+        self.stop_event = threading.Event()
+
+    def setup_curses(self):
+        """
+        Set up the curses environment.
+        """
+        curses.curs_set(0)
+        self.stdscr.clear()
+        self.stdscr.refresh()
+        self.height, self.width = self.stdscr.getmaxyx()
+
+    def display_banner(self):
+        """
+        Display the banner at the top of the screen.
+        """
+        banner = " Welcome to LRms Beacon Master V2.0 by Andy Kirby "
+        self.stdscr.addstr(0, 0, banner.center(self.width), curses.A_REVERSE)
+        self.stdscr.addstr(1, 0, "-" * (self.width - 1))
+
+    def display_output(self):
+        """
+        Display the output buffer on the screen.
+        """
+        for idx, line in enumerate(self.output_buffer):
+            if idx + 2 < self.height - 2:
+                self.stdscr.addstr(idx + 2, 0, line[:self.width-1])
+
+    def display_input_field(self):
+        """
+        Display the input field at the bottom of the screen.
+        """
+        if self.input_active:
+            prompt = "Enter Beacon Text (Max 50 chars): "
+            self.stdscr.addstr(self.height - 1, 0, prompt + self.user_input)
+        else:
+            self.stdscr.addstr(self.height - 1, 0, " " * (self.width - 1))
+
+    def add_message(self, message):
+        """
+        Add a message to the output buffer.
+
+        Args:
+            message (str): The message to add.
+        """
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.output_buffer.append(f"[{timestamp}] {message}")
+
+    def handle_input(self, ch):
+        """
+        Handle user input.
+
+        Args:
+            ch (int): The character input by the user.
+
+        Returns:
+            bool: True if the application should continue, False to exit.
+        """
+        if ch == ord('q'):
+            return False
+        elif ch == ord('b'):
+            self.input_active = not self.input_active
+        elif self.input_active:
+            if ch == 10:  # Enter key
+                self.beacon_text = self.user_input
+                self.add_message(f"New beacon text set: {self.beacon_text}")
+                self.user_input = ""
+                self.input_active = False
+            elif ch == 27:  # Escape key
+                self.input_active = False
+                self.user_input = ""
+            elif ch == curses.KEY_BACKSPACE or ch == 127:
+                self.user_input = self.user_input[:-1]
+            elif len(self.user_input) < 50:
+                self.user_input += chr(ch)
+        return True
+
+    def update(self):
+        """
+        Update the screen display.
+        """
+        self.stdscr.clear()
+        self.display_banner()
+        self.display_output()
+        self.display_input_field()
+        self.stdscr.refresh()
+
+    def run(self):
+        """
+        Run the main application loop.
+        """
+        beacon_thread = threading.Thread(target=self.send_beacon)
+        beacon_thread.start()
+
+        serial_read_thread = threading.Thread(target=self.read_serial)
+        serial_read_thread.start()
+
+        while not self.stop_event.is_set():
+            self.update()
+            ch = self.stdscr.getch()
+            if not self.handle_input(ch):
+                self.stop_event.set()
+                break
+
+        beacon_thread.join()
+        serial_read_thread.join()
+        self.device_connection.close()
+
+    def send_beacon(self):
+        """
+        Send beacon messages at regular intervals.
+        """
+        while not self.stop_event.is_set():
+            message = self.commander.send_at_command(self.beacon_text)
+            self.add_message(f"Beaconing: {message}")
+            self.stop_event.wait(BEACON_INTERVAL)
+
+    def read_serial(self):
+        """
+        Continuously read from the serial port.
+        """
+        while not self.stop_event.is_set():
+            for data in self.device_connection.read_serial():
+                self.add_message(f"Received: {data}")
+            self.stop_event.wait(0.1)
+
 def main(stdscr):
-    global input_active
-    stdscr.clear()
-    curses.curs_set(1)  # Show cursor
-    stdscr.addstr(curses.LINES - 3, 0, "Menu:")
-    stdscr.addstr(curses.LINES - 2, 0, "- Beacon Text (Press 'b')")
-    stdscr.addstr(curses.LINES - 1, 0, "Press 'q' to quit")
-    stdscr.refresh()
+    """
+    Main function to set up and run the application.
 
+    Args:
+        stdscr (curses.window): The main curses window.
+    """
     try:
-        # Start updating the UI in a separate thread
-        ui_thread = threading.Thread(target=update_ui, args=(stdscr,))
-        ui_thread.daemon = True
-        ui_thread.start()
-
-        # Start sending AT command with "Beaconing" in a separate thread
-        at_thread = threading.Thread(target=send_at_command)
-        at_thread.daemon = True
-        at_thread.start()
-
-        while True:
-            key = stdscr.getch()
-            if key == ord('q'):
-                break  # Exit on 'q' key press
-            elif key == ord('b'):
-                # Toggle input field visibility when 'b' is pressed
-                if input_active:
-                    stdscr.move(input_line, len("Enter Beacon Text (Max 50 chars): "))
-                    stdscr.clrtoeol()  # Clear input field
-                    input_active = False
-                else:
-                    get_user_input(stdscr)
-                    input_active = True
-
-    finally:
-        curses.nocbreak()
-        stdscr.keypad(False)
-        curses.echo()
-        curses.endwin()
-        ser.close()
+        device_connection = DeviceConnection()
+        device_connection.configure_device()
+        commander = Commander(device_connection)
+        ui = BeaconMasterUI(stdscr, device_connection, commander)
+        ui.run()
+    except serial.SerialException as e:
+        stdscr.addstr(0, 0, f"Serial Error: {e}")
+        stdscr.refresh()
+        stdscr.getch()
 
 if __name__ == "__main__":
     curses.wrapper(main)
