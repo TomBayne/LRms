@@ -1,125 +1,236 @@
-import machine
+"""
+A more sophisticated and pythonic version of the LRms-repeater-pico.py script.
+Aiming for a modular design and easier to add to down the road.
+"""
+
 import time
+import machine
 from machine import Pin
 
-# Define GPIO pins
-led = Pin(25, Pin.OUT)
-gpio2 = Pin(2, Pin.OUT)  # Assuming GPIO 2 is available and not in use
 
-# Initialize LED
-led.value(1)
+class DeviceConnection:
+    """
+    Manages the connection and communication with the LoRa device.
+    This class handles the UART connection, device configuration, and
+    basic read/write operations for RYLR993 or RYLR998 LoRa modules.
 
-# Initialize UART - NOTE Baudrate is 9600 FOR RYLR993 and 115200 for RYLR998
-uart = machine.UART(0, baudrate=9600, tx=machine.Pin(0), rx=machine.Pin(1))
+    Attributes:
+        uart (machine.UART): UART connection object.
+        device_type (str): Type of the LoRa device ('RYLR993' or 'RYLR998').
+        rf_freq (int): Radio frequency in Hz.
+        node_id (int): Node ID for the device.
+        tx_power (int): Transmission power in dBm.
+        lora_params (str): LoRa parameters string.
+    """
 
-# Send AT commands to configure the RYLR993 or RYLR998
+    def __init__(self, tx_pin=0, rx_pin=1, rf_freq=867500000, node_id=100, tx_power=22, lora_params='9,7,1,12', device_type='RYLR993'):
+        """
+        Initialize the DeviceConnection.
 
-uart.write(b'AT+RESET\r\n')  # Reset Module
-print("Reset RYLR Module Wait...")
-time.sleep(2)
-data = uart.readline().decode('utf-8').strip()
-print(data)
+        Args:
+            tx_pin (int): TX pin number.
+            rx_pin (int): RX pin number.
+            rf_freq (int): Radio frequency in Hz.
+            node_id (int): Node ID for the device.
+            tx_power (int): Transmission power in dBm.
+            lora_params (str): LoRa parameters string.
+            device_type (str): Type of the LoRa device ('RYLR993' or 'RYLR998').
 
-uart.write(b'AT+OPMODE=1\r\n')  # Set RYLR993 to poprietary mode - not needed for RYLR998
-print("Set RYLR993 to proprietary mode")
-time.sleep(2)
-data = uart.readline().decode('utf-8').strip()
-print(data)
-data = uart.readline().decode('utf-8').strip()
-print(data)
+        Raises:
+            ValueError: If an invalid device type is provided.
+        """
+        if device_type not in ['RYLR993', 'RYLR998']:
+            raise ValueError('Device type must be RYLR993 or RYLR998')
 
-uart.write(b'AT+RESET\r\n')  # Reset Module
-print("Reset RYLR Module")
-time.sleep(2)
-data = uart.readline().decode('utf-8').strip()
-print(data)
+        baud_rates = {'RYLR993': 9600, 'RYLR998': 115200}
+        self.uart = machine.UART(0, baudrate=baud_rates[device_type], tx=machine.Pin(
+            tx_pin), rx=machine.Pin(rx_pin))
+        self.device_type = device_type
+        self.rf_freq = rf_freq
+        self.node_id = node_id
+        self.tx_power = tx_power
+        self.lora_params = lora_params
 
-uart.write(b'AT+BAND=867500000\r\n') # Set LoRa frequency
-print("Setting RF Frequency to 867.500MHZ")
-time.sleep(1)
-data = uart.readline().decode('utf-8').strip()
-print(data)
-data = uart.readline().decode('utf-8').strip()
-print(data)
+    def read_serial(self, timeout=5000):
+        """
+        Read data from the UART connection.
 
-uart.write(b'AT+ADDRESS=100\r\n') # Set node ID
-print("Setting Node ID to 100")
-time.sleep(1)
-data = uart.readline().decode('utf-8').strip()
-print(data)
-data = uart.readline().decode('utf-8').strip()
-print(data)
-data = uart.readline().decode('utf-8').strip()
-print(data)
+        Args:
+            timeout (int): Timeout in milliseconds.
 
-uart.write(b'AT+CRFOP=22\r\n')  # Set TX power
-print("Setting TX power to 22dBm")
-time.sleep(1)
-data = uart.readline().decode('utf-8').strip()
-print(data)
-data = uart.readline().decode('utf-8').strip()
-print(data)
+        Returns:
+            bytes: Data read from the UART connection.
+        """
+        start_time = time.time.ticks_ms()
+        received_data = b''
+        while not received_data.endswith(b'\r\n'):
+            if time.time.ticks_diff(time.time.ticks_ms(), start_time) > timeout:
+                break
+            new_data = self.uart.read()
+            if new_data:
+                received_data += new_data
+        return received_data
 
-uart.write(b'AT+PARAMETER=9,7,1,12\r\n') # Set LoRa parameters - see RYLR documentation
-print("Setting LoRa Parameters for LRms")
-time.sleep(1)
-data = uart.readline().decode('utf-8').strip()
-print(data)
-data = uart.readline().decode('utf-8').strip()
-print(data)
-# Define your station ID
-my_ID = "100"
+    def write_serial(self, text):
+        """
+        Write data to the UART connection.
 
-# Continuous loop to read from serial port
-while True:
-    # Read data until a complete message is received or timeout occurs
-    start_time = time.ticks_ms()
-    received_data = b''
-    while not received_data.endswith(b'\r\n'):
-        new_data = uart.read()
-        if new_data is not None:
-            received_data += new_data
-        # Check if timeout has occurred (5000 ms = 5 seconds)
-        if time.ticks_diff(time.ticks_ms(), start_time) > 5000:
-            break
-    
-    # Print received data
-    print("Received:", received_data.decode().strip())
-    led.value(1)
-    time.sleep(1)
-    led.value(0)
-    
-    # Check if received data contains "RPT"
-    if b"RPT" in received_data:
-        # Remove "RPT" from the received data
-        received_data = received_data.replace(b"RPT", b"").strip()  # Remove leading and trailing spaces after removing "RPT"
-        
-        # Extract station ID
-        station_ID = received_data.split(b"+RCV=")[1].split(b",")[0]
-        
-        # Extract message text
-        message_text = received_data.split(b",")[2].strip()  # Remove leading and trailing spaces from message text
-        
-        # Count number of characters in message text
-        num_characters = len(message_text)
-        
-        # Calculate total number of characters including station ID, "VIA", and my_ID
-        total_characters = num_characters + len(station_ID) + len(b" ") + len(b"VIA") + len(my_ID.encode())
-        
-        # Assemble message to be sent
-        send_message = "AT+SEND=0,{},{} {}VIA{}\r\n".format(total_characters, message_text.decode(), station_ID.decode(), my_ID)
-        
-        # Print message to be sent
-        print("Sending:", send_message)
-        
-        # Turn on GPIO 2
-#         gpio2.value(1)
-        
-        # Send message to serial port
-        uart.write(send_message.encode())
-        
-        # Turn off GPIO 2
-#         time.sleep(2)
-#         gpio2.value(0)
+        Args:
+            text (str): Text to be written to the UART connection.
+        """
+        self.uart.write(text.encode())
+
+    def configure_device(self):
+        """
+        Configure the LoRa device with the specified settings.
+        This method sends a series of AT commands to set up the device
+        according to the initialized parameters.
+        """
+        self.write_serial('AT+RESET\r\n')
+        time.sleep(2)
+
+        if self.device_type == 'RYLR993':
+            self.write_serial('AT+OPMODE=1\r\n')
+            time.sleep(2)
+
+        self.write_serial('AT+RESET\r\n')
+        time.sleep(2)
+
+        self.write_serial(f'AT+BAND={self.rf_freq}\r\n')
+        time.sleep(1)
+
+        self.write_serial(f'AT+ADDRESS={self.node_id}\r\n')
+        time.sleep(1)
+
+        self.write_serial(f'AT+CRFOP={self.tx_power}\r\n')
+        time.sleep(1)
+
+        self.write_serial(f'AT+PARAMETER={self.lora_params}\r\n')
+        time.sleep(1)
+
+        for _ in range(10):  # Read and discard any responses
+            self.uart.readline()
 
 
+class MessageHandler:
+    """
+    Handles message operations for the LoRa device.
+    This class is responsible for processing received messages and
+    sending repeated messages.
+
+    Attributes:
+        device_connection (DeviceConnection): The device connection object.
+        station_id (str): The ID of this station.
+    """
+
+    def __init__(self, device_connection, station_id):
+        """
+        Initialize the MessageHandler.
+
+        Args:
+            device_connection (DeviceConnection): The device connection object.
+            station_id (str): The ID of this station.
+        """
+        self.device_connection = device_connection
+        self.station_id = station_id
+
+    def process_message(self, received_data):
+        """
+        Process the received message and repeat if necessary.
+
+        Args:
+            received_data (bytes): The received data.
+
+        Returns:
+            str: A string describing the action taken.
+        """
+        if b"RPT" in received_data:
+            return "Ignoring repeated message"
+
+        decoded_data = received_data.decode().strip()
+        if "+RCV=" not in decoded_data:
+            return f"Received non-message data: {decoded_data}"
+
+        parts = decoded_data.split(",")
+        if len(parts) < 3:
+            return f"Received malformed message: {decoded_data}"
+
+        sender_id = parts[0].split("=")[1]
+        message_text = parts[2].strip()
+
+        total_chars = len(message_text) + len(sender_id) + \
+            len(" VIA") + len(self.station_id)
+        repeated_message = f"AT+SEND=0,{total_chars},{
+            message_text} {sender_id}VIA{self.station_id}\r\n"
+
+        self.device_connection.write_serial(repeated_message)
+        return f"Repeated message: {repeated_message.strip()}"
+
+
+class RepeaterApplication:
+    """
+    Main application class for the LRms Repeater.
+    This class sets up the device connection, message handler, and
+    runs the main application loop.
+
+    Attributes:
+        device_connection (DeviceConnection): The device connection object.
+        message_handler (MessageHandler): The message handler object.
+        led (machine.Pin): LED pin object.
+    """
+
+    def __init__(self, led_pin=25):
+        """
+        Initialize the RepeaterApplication.
+
+        Args:
+            led_pin (int): Pin number for the LED.
+        """
+        self.device_connection = DeviceConnection()
+        self.message_handler = MessageHandler(self.device_connection, "100")
+        self.led = Pin(led_pin, Pin.OUT)
+
+    def setup(self):
+        """
+        Set up the device connection and LED.
+        """
+        self.device_connection.configure_device()
+        self.led.value(1)
+
+    def run(self):
+        """
+        Run the main application loop.
+        """
+        print("LRms Repeater running. Press Ctrl+C to stop.")
+        try:
+            while True:
+                received_data = self.device_connection.read_serial()
+                if received_data:
+                    print(f"Received: {received_data.decode().strip()}")
+                    result = self.message_handler.process_message(
+                        received_data)
+                    print(result)
+                    self.blink_led()
+        except KeyboardInterrupt:
+            print("Repeater stopped.")
+
+    def blink_led(self):
+        """
+        Blink the LED to indicate message processing.
+        """
+        self.led.value(1)
+        time.sleep(0.5)
+        self.led.value(0)
+
+
+def main():
+    """
+    Main function to set up and run the application.
+    """
+    app = RepeaterApplication()
+    app.setup()
+    app.run()
+
+
+if __name__ == "__main__":
+    main()
