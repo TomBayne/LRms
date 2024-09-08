@@ -1,5 +1,8 @@
 """
 Describes a message object
+A message object does not have a send() method because the message is sent via
+whatever handles the connection to the device. This way the message object is agnostic
+to however the device is connected. This will allow for more flexibility in the future.
 """
 
 class Message:
@@ -7,21 +10,11 @@ class Message:
     Describes a message object
     """
 
-    def __init__(self, msg_bytes=b""):
+    def __init__(self, content=b""):
         """
         Initialise the Message object.
         """
-        self.msg_bytes = msg_bytes
-
-    def send(self):
-        """
-        Sends a message via the serial connection.
-
-        Returns:
-            bool: True if the message was sent successfully, False otherwise.
-        """
-        # TODO
-        return False
+        self.content = content
 
     def encode(self, usr_text):
         """
@@ -34,7 +27,7 @@ class Message:
             str: Encoded message string.
         """
         # TODO - Probably more to it than just encoding, e.g. Headers.
-        self.msg_bytes = usr_text.encode()
+        self.content = usr_text.encode()
 
     def decode(self):
         """
@@ -45,4 +38,4 @@ class Message:
             str: Decoded message string.
         """
         # TODO - Probably more to it than just decoding
-        return self.msg_bytes.decode()
+        return self.content.decode()

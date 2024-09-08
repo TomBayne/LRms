@@ -1,8 +1,11 @@
 """
 Handles initial configuration of a supported LoRa device.
+
+This won't use the device_commands module, because it's just for initial setup.
+Instead we will just write the raw commands to the serial connection.
 """
 
-import threading
+from time import sleep
 
 class DeviceConfigurator:
     """
@@ -33,19 +36,19 @@ class DeviceConfigurator:
         according to the initialised parameters.
         """
         self.connection.write_serial('AT+RESET\r\n')
-        threading.Event().wait(2)
+        sleep(2)
         self.connection.write_serial('AT+OPMODE=1\r\n')
-        threading.Event().wait(2)
+        sleep(2)
         self.connection.write_serial('AT+RESET\r\n')
-        threading.Event().wait(2)
+        sleep(2)
         self.connection.write_serial(f'AT+BAND={self.rf_freq}\r\n')
-        threading.Event().wait(1)
+        sleep(1)
         self.connection.write_serial(f'AT+ADDRESS={self.node_id}\r\n')
-        threading.Event().wait(1)
+        sleep(1)
         self.connection.write_serial(f'AT+CRFOP={self.tx_power}\r\n')
-        threading.Event().wait(1)
+        sleep(1)
         self.connection.write_serial(f'AT+PARAMETER={self.lora_params}\r\n')
-        threading.Event().wait(1)
+        sleep(1)
         self.connection.read_serial()
 
     def configure_rylr998(self):
@@ -56,13 +59,13 @@ class DeviceConfigurator:
         according to the initialised parameters.
         """
         self.connection.write_serial('AT+RESET\r\n')
-        threading.Event().wait(2)
+        sleep(2)
         self.connection.write_serial(f'AT+BAND={self.rf_freq}\r\n')
-        threading.Event().wait(1)
+        sleep(1)
         self.connection.write_serial(f'AT+ADDRESS={self.node_id}\r\n')
-        threading.Event().wait(1)
+        sleep(1)
         self.connection.write_serial(f'AT+CRFOP={self.tx_power}\r\n')
-        threading.Event().wait(1)
+        sleep(1)
         self.connection.write_serial(f'AT+PARAMETER={self.lora_params}\r\n')
-        threading.Event().wait(1)
+        sleep(1)
         self.connection.read_serial()

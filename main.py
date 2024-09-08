@@ -2,27 +2,18 @@
 Main entry point for the Beacon Master application.
 """
 
-from serial import SerialException
-from src.functions.device_connection import DeviceConnection
+import sys
+from src.functions.device_connection import Serial
 from src.functions.device_setup import DeviceConfigurator
-from src.functions.commander import Commander
-from src.ui import BeaconMasterUI
 
-def run_ui(stdscr, device_connection, commander):
-    """
-    Main function to set up and run the application.
 
-    Args:
-        stdscr (curses.window): The main curses window.
+def run_ui(conn):
     """
-    try:
-        commander = Commander(device_connection)
-        ui = BeaconMasterUI(stdscr, device_connection, commander)
-        ui.run()
-    except SerialException as e:
-        stdscr.addstr(0, 0, f"Serial Error: {e}")
-        stdscr.refresh()
-        stdscr.getch()
+    TODO: Unimplemented.
+    Main function which runs the application.
+    """
+    return
+
 
 def connect(device_type):
     """
@@ -34,12 +25,29 @@ def connect(device_type):
     Returns:
         DeviceConnection: The device connection object.
     """
-    device_connection = DeviceConnection(device_type=device_type)
-    device_configurator = DeviceConfigurator(device_connection, 867500000, 1, 22, '9,7,1,12')
+    conn = Serial(device_type=device_type)
+    device_configurator = DeviceConfigurator(
+        conn, 867500000, 1, 22, '9,7,1,12')
     if device_type == 'RYLR993':
         device_configurator.configure_rylr993()
     elif device_type == 'RYLR998':
         device_configurator.configure_rylr998()
     else:
         raise ValueError(f"Invalid device type: {device_type}")
-    return device_connection
+    return conn
+
+
+if __name__ == '__main__':
+    # Simple connection UI, will improve later.
+    usr_in = input("Select model:\n1. RYLR993\n2. RYLR998\n")
+    if usr_in == '1':
+        device_connection = connect('RYLR993')
+    elif usr_in == '2':
+        device_connection = connect('RYLR998')
+    else:
+        raise ValueError('Invalid input')
+    run_ui(device_connection)
+
+    print("Exiting program...")
+    device_connection.close()
+    sys.exit(0)
