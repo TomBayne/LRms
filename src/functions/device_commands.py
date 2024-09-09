@@ -5,10 +5,11 @@ Does not send the commands, only creates them as an object.
 - RST: Reset the LoRa device.
 - AT: Send an AT command to the LoRa device.
 - SEND: Send a message to the LoRa device.
-- REC: Receive a message from the LoRa device.
-
-TODO: I'm not sure yet if these commands are even correct, or what we need. It's just a placeholder.
 """
+
+from .message import Message
+from .device_connection import Serial
+
 
 class Command:
     """
@@ -17,51 +18,39 @@ class Command:
     - RST: Reset the LoRa device.   
     - AT: Send an AT command to the LoRa device.
     - SEND: Send a message to the LoRa device.
-    - REC: Receive a message from the LoRa device.
     """
 
-    def __init__(self, command_content=''):
+    def __init__(self, connection: Serial):
         """
         Initialise the Command object.
 
-        Args:
-            command_type (str): The type of command to send ('RST', 'AT', 'SEND', 'REC').
-            command (str): The command to send.
+        Arguments:
+            connection (DeviceConnection): The device connection object.
         """
-        self.command_content = command_content
+        self.connection = connection
 
-    def rst(self):
+    def send_msg(self, message: Message):
         """
-        Build and send a reset command to the LoRa device.
+        Takes a message object, prepares it, and sends it to over RF via the serial device.
 
-        Returns:
-            str: A string describing the sent command.
+        Arguments:
+            message (Message): The message object to send.
         """
-        return "AT+RESET\r\n"
+        msg_bytes = message.encode()
+        prepared = f"AT+SEND=0,{len(msg_bytes)},{msg_bytes}\r\n"
+        self.connection.write_serial(prepared.encode())
 
-    def at(self):
+    def reset(self):
         """
-        Build and send an AT command to the LoRa device.
+        Resets the LoRa device.
+        """
+        self.connection.write_serial(b"AT+RST\r\n")
 
-        Returns:
-            str: A string describing the sent command.
+    def custom_at_cmd(self, command: str):
         """
-        return f"AT{self.command_content}\r\n"
-    
-    def send(self):
-        """
-        Build and send a SEND command to the LoRa device.
+        Sends a custom ATcommand to the LoRa device.
 
-        Returns:
-            str: A string describing the sent command.
+        Arguments:
+            command (str): The command to send (Without the 'AT+').
         """
-        return f"SEND {self.command_content}\r\n"
-
-    def rec(self):
-        """
-        Build and send a REC command to the LoRa device.
-
-        Returns:
-            str: A string describing the sent command.
-        """
-        return f"REC {self.command_content}\r\n"
+        self.connection.write_serial(f"AT+{command}\r\n".encode())

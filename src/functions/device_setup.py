@@ -6,12 +6,18 @@ Instead we will just write the raw commands to the serial connection.
 """
 
 from time import sleep
+from .device_connection import Serial
+
 
 class DeviceConfigurator:
     """
     Manages the configuration of the LoRa device.
+
+    The configuration processes defined here are not nice but I wanted to keep it obvious
+    exactly what the confugration process is.
     """
-    def __init__(self, connection, rf_freq, node_id, tx_power, lora_params):
+
+    def __init__(self, connection: Serial, rf_freq: int, node_id: int, tx_power: int, lora_params: str):
         """
         Initialise the DeviceConfigurator.
 
@@ -35,20 +41,11 @@ class DeviceConfigurator:
         This method sends a series of AT commands to set up the device
         according to the initialised parameters.
         """
-        self.connection.write_serial('AT+RESET\r\n')
-        sleep(2)
-        self.connection.write_serial('AT+OPMODE=1\r\n')
-        sleep(2)
-        self.connection.write_serial('AT+RESET\r\n')
-        sleep(2)
-        self.connection.write_serial(f'AT+BAND={self.rf_freq}\r\n')
-        sleep(1)
-        self.connection.write_serial(f'AT+ADDRESS={self.node_id}\r\n')
-        sleep(1)
-        self.connection.write_serial(f'AT+CRFOP={self.tx_power}\r\n')
-        sleep(1)
-        self.connection.write_serial(f'AT+PARAMETER={self.lora_params}\r\n')
-        sleep(1)
+        setup_cmds = ['AT+RESET\r\n', 'AT+OPMODE=1\r\n', 'AT+RESET\r\n', f'AT+BAND={self.rf_freq}\r\n',
+                      f'AT+ADDRESS={self.node_id}\r\n', f'AT+CRFOP={self.tx_power}\r\n', f'AT+PARAMETER={self.lora_params}\r\n']
+        for cmd in setup_cmds:
+            self.connection.write_serial(cmd)
+            sleep(2)
         self.connection.read_serial()
 
     def configure_rylr998(self):
@@ -58,14 +55,9 @@ class DeviceConfigurator:
         This method sends a series of AT commands to set up the device
         according to the initialised parameters.
         """
-        self.connection.write_serial('AT+RESET\r\n')
-        sleep(2)
-        self.connection.write_serial(f'AT+BAND={self.rf_freq}\r\n')
-        sleep(1)
-        self.connection.write_serial(f'AT+ADDRESS={self.node_id}\r\n')
-        sleep(1)
-        self.connection.write_serial(f'AT+CRFOP={self.tx_power}\r\n')
-        sleep(1)
-        self.connection.write_serial(f'AT+PARAMETER={self.lora_params}\r\n')
-        sleep(1)
+        setup_cmds = ['AT+RESET\r\n', f'AT+BAND={self.rf_freq}\r\n', f'AT+ADDRESS={self.node_id}\r\n',
+                      f'AT+CRFOP={self.tx_power}\r\n', f'AT+PARAMETER={self.lora_params}\r\n']
+        for cmd in setup_cmds:
+            self.connection.write_serial(cmd)
+            sleep(2)
         self.connection.read_serial()

@@ -11,6 +11,7 @@ Anything more should be done by another module.
 
 import serial
 
+
 class Serial:
     """
     Manages a Serial connection and communication with the LoRa device.
@@ -27,7 +28,8 @@ class Serial:
         lora_params (str): LoRa parameters string.
     """
 
-    def __init__(self, port='/dev/ttyS0', rf_freq=867500000, node_id=1, tx_power=22, lora_params='9,7,1,12', device_type='RYLR993'):
+    def __init__(self, port: str = '/dev/ttyS0', rf_freq: int = 867500000, node_id: int = 1, tx_power: int = 22,
+                 lora_params: str = '9,7,1,12', device_type: str = 'RYLR993'):
         """
         Initialise the DeviceConnection, creating a serial connection.
 
@@ -38,7 +40,7 @@ class Serial:
             tx_power (int): Transmission power in dBm.
             lora_params (str): LoRa parameters string.
             device_type (str): Type of the LoRa device ('RYLR993' or 'RYLR998').
-        
+
         Raises:
             ValueError: If an invalid device type is provided.
         """
@@ -52,7 +54,7 @@ class Serial:
         self.tx_power = tx_power
         self.lora_params = lora_params
 
-    def read_serial(self, max_reads=100):
+    def read_serial(self, max_reads: int = 100):
         """
         Read data from the serial connection.
 
@@ -60,22 +62,22 @@ class Serial:
             max_reads (int): Maximum number of read attempts.
 
         Yields:
-            str: Decoded data read from the serial connection.
+            bytes: Raw data read from the serial connection.
         """
         for _ in range(max_reads):
-            data = self.conn.readline().decode('utf-8').strip()
+            data = self.conn.readline()
             if not data:
                 break
             yield data
 
-    def write_serial(self, text):
+    def write_serial(self, data: bytes):
         """
         Write data to the serial connection.
 
         Args:
-            text (str): Text to be written to the serial connection.
+            data (bytes): data to be written to the serial connection.
         """
-        self.conn.write(text.encode())
+        self.conn.write(data)
 
     def close(self):
         """
