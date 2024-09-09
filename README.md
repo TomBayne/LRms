@@ -1,3 +1,18 @@
+--- New README begin ---
+
+I'm rewriting this code for the long-range LoRa Messaging system that Andy Kirby was experimenting with.
+Currently have no device to test on so it's all a best guess based on the docs and the legacy code.
+
+Goals:
+- Get it running
+- Message compression (Probably copy Meshtastic's implementation)
+- Public Key (or PSK AES) end-to-end encryption, including sender identity
+- Zero-knowledge repeaters (i.e. repeaters that don't need to decrypt in order to forward.)
+
+More to come
+
+--- Original README begin ---
+
 This is something i have been playing with for a little while now and I thought I'd put it out there to see if anyone else is interested in experimenting with it too! 
 
 I'm calling this LRms (Long Range messaging system)
