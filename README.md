@@ -7,6 +7,7 @@ Goals:
 - Get it running
 - Message compression (Probably copy Meshtastic's implementation)
 - Public Key (or PSK AES) end-to-end encryption, including sender identity
+  - Not using the built in encryption to avoid trusting the unknown implementation.
 - Zero-knowledge repeaters (i.e. repeaters that don't need to decrypt in order to forward.)
 
 More to come
